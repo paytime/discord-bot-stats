@@ -1,0 +1,23 @@
+{
+  "name": "discord-bot-stats",
+  "version": "1.0.0",
+  "description": "Discord server stats bot",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paytime/discord-bot-stats.git"
+  },
+  "author": "paytime",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/paytime/discord-bot-stats/issues"
+  },
+  "homepage": "https://github.com/paytime/discord-bot-stats#readme",
+  "dependencies": {
+    "discord.js": "^11.5.1",
+    "dotenv": "^8.2.0"
+  }
+}
