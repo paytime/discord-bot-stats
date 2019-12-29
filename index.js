@@ -9,33 +9,16 @@ bot.commands = new Discord.Collection();
 
 const serverId = process.env.SERVERID;
 const channelId = process.env.CHANNELID;
+const invchannelId = process.env.INVCHANNELID;
 const botId = process.env.BOTID;
 const iconUrl = process.env.ICONURL;
 
 let guild;
 let channel;
+let invchannel;
 let roles = {};
 
-/**
- * Reads the specified roles file
- */
-function readRolesFile() {
-    fs.readFile('./roles.json', (err, data) => {
-        if (err) { // File doesn't exist.
-            throw new Error('Roles file does not exist. Check out the \'roles.example.json\' file!');
-        }
-
-        try {
-            roles = JSON.parse(data);
-        } catch (err) {
-            throw new Error("Failed to parse list-file: " + err)
-        }
-
-        console.info('SUCCESS!');
-
-        setupChannel();
-    });
-}
+let messageId;
 
 /**
  * Calls when the bot has started
@@ -57,7 +40,17 @@ bot.on('ready', () => {
     channel = guild.channels.get(channelId);
 
     if (!channel) {
-        console.error('Could not find specified channel!');
+        console.error('Could not find statistics channel!');
+        reconnect(false);
+        return;
+    }
+
+    console.info('Trying to find the main/invite channel...');
+
+    invchannel = guild.channels.get(invchannelId);
+
+    if (!channel) {
+        console.error('Could not find main/invite channel!');
         reconnect(false);
         return;
     }
@@ -86,11 +79,62 @@ bot.on('guildMemberRemove', setupChannel);
 bot.on('guildMemberUpdate', setupChannel);
 
 /**
+ * Whenever a reaction is added to the stats message, the reaction will be removed and an invite link will be generated
+ */
+bot.on('messageReactionAdd', (msgReact, user) => {
+    if (!messageId) return;
+    if (msgReact.message.id !== messageId) return;
+
+    msgReact.remove().then(() => {
+        if (!user || user.bot || !user.id) return;
+        const gm = guild.members.get(user.id);
+        if (!gm) return;
+
+        const reason = `Invite created by ${user.username}#${user.discriminator}`;
+
+        invchannel.createInvite({
+            temporary: true,
+            maxUses: 2,
+            unique: true,
+            reason: reason
+        }).then(invlink => {
+            console.log(`${new Date()}: ${reason} ; Code: ${invlink.code}`);
+
+            user.send(`https://discord.gg/${invlink.code}`);
+        });
+    });
+});
+
+/**
+ * Reads the specified roles file
+ */
+function readRolesFile() {
+    fs.readFile('./roles.json', (err, data) => {
+        if (err) { // File doesn't exist.
+            throw new Error('Roles file does not exist. Check out the \'roles.example.json\' file!');
+        }
+
+        try {
+            roles = JSON.parse(data);
+        } catch (err) {
+            throw new Error("Failed to parse list-file: " + err)
+        }
+
+        console.info('SUCCESS!');
+
+        try {
+            setupChannel();
+        } catch (error) {
+            throw new Error("An error occured while posting the stats message: " + error);
+        }
+    });
+}
+
+/**
  * Clears the specified channel of its content, sets the member's count as the channel's title and posts the stats embed
  */
 function setupChannel() {
     let date = new Date();
-    console.info(`Stats updated at: ${date}`);
 
     // First of all, delete all messages in the channel
     channel.bulkDelete(100);
@@ -205,7 +249,10 @@ function setupChannel() {
         }
     };
 
-    channel.send(content);
+    channel.send(content).then(sent => {
+        console.info(`Stats updated at: ${date}`);
+        messageId = sent.id;
+    });
 }
 
 /**
@@ -228,5 +275,6 @@ function reconnect(isFirstLogin) {
     bot.destroy();
     bot.login(process.env.TOKEN);
 }
+
 // The program starts here
 reconnect(true);
