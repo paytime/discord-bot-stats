@@ -85,7 +85,7 @@ bot.on('messageReactionAdd', (msgReact, user) => {
     if (!messageId) return;
     if (msgReact.message.id !== messageId) return;
 
-    msgReact.remove().then(() => {
+    msgReact.message.clearReactions().then(() => {
         if (!user || user.bot || !user.id) return;
         const gm = guild.members.get(user.id);
         if (!gm) return;
