@@ -29,12 +29,12 @@ function readRolesFile() {
             roles = JSON.parse(data);
         } catch (err) {
             throw new Error("Failed to parse list-file: " + err)
-        }     
+        }
 
         console.info('SUCCESS!');
 
         setupChannel();
-    });  
+    });
 }
 
 /**
@@ -48,6 +48,7 @@ bot.on('ready', () => {
 
     if (!guild) {
         console.error('Could not find specified guild!');
+        reconnect(false);
         return;
     }
 
@@ -57,22 +58,25 @@ bot.on('ready', () => {
 
     if (!channel) {
         console.error('Could not find specified channel!');
+        reconnect(false);
         return;
     }
 
     console.info('Checking if bot has Administrator privileges...');
-    
+
     if (!guild.members.get(botId) || !guild.members.get(botId).hasPermission('ADMINISTRATOR')) {
         console.error('Bot is not an admin!');
+        reconnect(false);
         return;
     }
 
     console.info('Loading roles...');
 
-    try{
+    try {
         readRolesFile();
     } catch (err) {
         console.error(err);
+        reconnect(false);
         return;
     }
 });
@@ -85,48 +89,79 @@ bot.on('guildMemberUpdate', setupChannel);
  * Clears the specified channel of its content, sets the member's count as the channel's title and posts the stats embed
  */
 function setupChannel() {
+    let date = new Date();
+    console.info(`Stats updated at: ${date}`);
+
     // First of all, delete all messages in the channel
     channel.bulkDelete(100);
 
     const membersCount = Array.from(guild.members.filter(m => !m.user.bot)).length; // Members count excluding bots.
 
     // Get all class roles
-    let classFields = "**Classes**\n\n";
+    let classFields = `**[Classes](${getChannelLink(roles.classes.select)})**\n\n`;
+    let classFields2 = "\u200b\n\n"; // Workaround for the field 1024 chars limit
 
-    for (let i = 0; i < roles.classes.length; i++) {
-        const c = roles.classes[i];
+    for (let i = 0; i < roles.classes.list.length; i++) {
+        const c = roles.classes.list[i];
         const count = Array.from(guild.members.filter(m => !m.user.bot && m.roles.has(c.id))).length;
         const emoji = guild.emojis.find(e => e.name === c.emoji);
 
-        classFields += `${emoji} <@&${c.id}>: **${count}**\u200b\n\n`;
+        const text = `[${emoji} <@&${c.id}> **(${count})**](${getChannelLink(c.channel)})\n\n`;
+
+        if (i > 3) {
+            classFields2 += text;
+        } else {
+            classFields += text;
+        }
     }
 
-    let rolesFields = "**Roles**\n\n";
+    let rolesFields = `**[Roles](${getChannelLink(roles.roles.select)})**\n\n`;
 
     // Get all ingame roles
-    for (let i = 0; i < roles.roles.length; i++) {
-        const c = roles.roles[i];
+    for (let i = 0; i < roles.roles.list.length; i++) {
+        const c = roles.roles.list[i];
         const count = Array.from(guild.members.filter(m => !m.user.bot && m.roles.has(c.id))).length;
 
-        rolesFields += `<@&${c.id}>: **${count}**\u200b\n\n`;
+        rolesFields += `[<@&${c.id}> **(${count})**](${getChannelLink(c.channel)})    `;
     }
 
-    let profFields = "**Professions**\n\n";
+    let raidersFields = `**[Raiders](${getChannelLink(roles.raiders.select)})**\n\n`;
+
+    // Get all raider roles
+    for (let i = 0; i < roles.raiders.list.length; i++) {
+        const c = roles.raiders.list[i];
+        const count = Array.from(guild.members.filter(m => !m.user.bot && m.roles.has(c.id))).length;
+
+        const text = `[${c.emoji} <@&${c.id}> **(${count})**](${getChannelLink(c.channel)})    `;
+
+        raidersFields += text;
+
+        if (i === 1) raidersFields += '\n\n';
+    }
+
+    let profFields = `**[Professions](${getChannelLink(roles.professions.select)})**\n\n`;
+    let profFields2 = "\u200b\n\n"; // Workaround for the field 1024 chars limit
 
     // Get all profession roles
-    for (let i = 0; i < roles.professions.length; i++) {
-        const c = roles.professions[i];
+    for (let i = 0; i < roles.professions.list.length; i++) {
+        const c = roles.professions.list[i];
         const count = Array.from(guild.members.filter(m => !m.user.bot && m.roles.has(c.id))).length;
         const emoji = guild.emojis.find(e => e.name === c.emoji);
 
-        profFields += `${emoji} <@&${c.id}>: **${count}**\u200b\n\n`;
+        const text = `[${emoji} <@&${c.id}> **(${count})**](${getChannelLink(c.channel)})\n\n`;
+
+        if (i > 3) {
+            profFields2 += text;
+        } else {
+            profFields += text;
+        }
     }
 
     const content = {
         embed: {
-            timestamp: new Date(),
-            title: `<${guild.name}> SERVER STATS`,
-            description: `Guild Members: ${membersCount}`,
+            timestamp: date,
+            title: `<${guild.name}> SERVER STATISTICS`,
+            description: `Guild Members: **${membersCount}**`,
             color: 8462170,
             thumbnail: {
                 url: iconUrl
@@ -139,12 +174,27 @@ function setupChannel() {
                 },
                 {
                     name: '\u200b',
-                    value: rolesFields,
+                    value: classFields2,
                     inline: true
                 },
                 {
                     name: '\u200b',
+                    value: rolesFields,
+                    inline: false
+                },
+                {
+                    name: '\u200b',
+                    value: raidersFields,
+                    inline: false
+                },
+                {
+                    name: '\u200b',
                     value: profFields,
+                    inline: true
+                },
+                {
+                    name: '\u200b',
+                    value: profFields2,
                     inline: true
                 }
             ],
@@ -154,9 +204,29 @@ function setupChannel() {
             }
         }
     };
-    
+
     channel.send(content);
 }
 
+/**
+ * Gets the URL for a server link
+ * @param {*} id 
+ */
+function getChannelLink(id) {
+    return `http://discordapp.com/channels/${guild.id}/${id}`;
+}
+
+/**
+ * Destroys the client and attempts to relaunch
+ * @param {*} isFirstLogin 
+ */
+function reconnect(isFirstLogin) {
+    if (!isFirstLogin) {
+        console.info('Reconnecting...');
+    }
+
+    bot.destroy();
+    bot.login(process.env.TOKEN);
+}
 // The program starts here
-bot.login(process.env.TOKEN);
+reconnect(true);
